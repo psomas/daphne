@@ -80,6 +80,77 @@ struct EwBinaryObjSca<DenseMatrix<VT>, DenseMatrix<VT>, VT> {
 };
 
 // ----------------------------------------------------------------------------
+// CSRMatrix <- CSRMatrix, scalar
+// ----------------------------------------------------------------------------
+
+template<typename VT>
+struct EwBinaryObjSca<CSRMatrix<VT>, CSRMatrix<VT>, VT> {
+    static void apply(BinaryOpCode opCode, CSRMatrix<VT> *& res, const CSRMatrix<VT> * lhs, VT rhs, DCTX(ctx)) {
+        const size_t numRows = lhs->getNumRows();
+        const size_t numCols = lhs->getNumCols();
+        const size_t nnz = lhs->getNumNonZeros();
+
+        // FIXME: make sure the CSR -> CSR specialization is only called for
+        // mul / div / etc which should prefer sparsity, and not for add / sub
+        // / etc, since we might end with a denser result
+        assert(opCode == BinaryOpCode::MUL || opCode == BinaryOpCode::DIV);
+        EwBinaryScaFuncPtr<VT, VT, VT> func = getEwBinaryScaFuncPtr<VT, VT, VT>(opCode);
+
+        if(res == nullptr)
+            res = DataObjectFactory::create<CSRMatrix<VT>>(numRows, numCols, nnz, false);
+
+        VT * valuesRes = res->getValues();
+        size_t * colIdxsRes = res->getColIdxs();
+        size_t * rowOffsetsRes = res->getRowOffsets();
+
+        rowOffsetsRes[0] = 0;
+        for(size_t r = 0, pos = 0; r < numRows; r++) {
+            const size_t rowNumNonZeros = lhs->getNumNonZeros(r);
+            const size_t * rowColIdxs = lhs->getColIdxs(r);
+            const VT * rowValues = lhs->getValues(r);
+
+            for(size_t i = 0; i < rowNumNonZeros; i++) {
+                const size_t c = rowColIdxs[i];
+                const VT val = func(rowValues[i], rhs, ctx);
+                if (val) {
+                    valuesRes[pos] = val;
+		    colIdxsRes[pos++] = c;
+                }
+            }
+            rowOffsetsRes[r + 1] = pos;
+        }
+    }
+};
+
+// ----------------------------------------------------------------------------
+// DenseMatrix <- CSRMatrix, scalar
+// ----------------------------------------------------------------------------
+
+template<typename VT>
+struct EwBinaryObjSca<DenseMatrix<VT>, CSRMatrix<VT>, VT> {
+    static void apply(BinaryOpCode opCode, DenseMatrix<VT> *& res, const CSRMatrix<VT> * lhs, VT rhs, DCTX(ctx)) {
+        const size_t numRows = lhs->getNumRows();
+        const size_t numCols = lhs->getNumCols();
+
+        EwBinaryScaFuncPtr<VT, VT, VT> func = getEwBinaryScaFuncPtr<VT, VT, VT>(opCode);
+
+        if(res == nullptr)
+            res = DataObjectFactory::create<DenseMatrix<VT>>(numRows, numCols, false);
+
+        VT * valuesRes = res->getValues();
+        const VT zero_res = func(VT(0), rhs, ctx);
+
+        for(size_t r = 0; r < numRows; r++) {
+            for(size_t c = 0; c < numCols; c++) {
+                const VT val = lhs->get(r, c);
+                valuesRes[c] = val ? func(lhs->get(r, c), rhs, ctx) : zero_res;
+            }
+            valuesRes += res->getRowSkip();
+        }
+    }
+};
+
+// ----------------------------------------------------------------------------
 // Matrix <- Matrix, scalar
 // ----------------------------------------------------------------------------
 
@@ -102,7 +173,6 @@ struct EwBinaryObjSca<Matrix<VT>, Matrix<VT>, VT> {
         res->finishAppend();
     }
 };
-
 
 // ----------------------------------------------------------------------------
 // Frame <- Frame, scalar

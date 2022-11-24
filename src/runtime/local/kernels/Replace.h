@@ -195,4 +195,36 @@ struct Replace<CSRMatrix<VT>, CSRMatrix<VT>, VT> {
     }
 };
 
+// ----------------------------------------------------------------------------
+// DenseMatrix <- CSRMatrix
+// ----------------------------------------------------------------------------
+
+template<typename VT>
+struct Replace<DenseMatrix<VT>, CSRMatrix<VT>, VT> {
+    static void apply(DenseMatrix<VT> *& res, const CSRMatrix<VT> * arg, VT pattern, VT replacement, DCTX(ctx)) {
+        const auto nr = arg->getNumRows();
+        const auto nc = arg->getNumCols();
+
+        if(res == nullptr)
+            res = DataObjectFactory::create<DenseMatrix<VT>>(nr, nc, false);
+
+        VT * valuesRes = res->getValues();
+        const VT v = pattern ? 0 : replacement; // if pattern is 0, use the repl for the initial memset
+
+        memset(valuesRes, v, sizeof(VT) * nr * nc);
+        for(size_t r = 0; r < nr; r++) {
+            const auto rowNumNonZeros = arg->getNumNonZeros(r);
+            const auto * rowColIdxs = arg->getColIdxs(r);
+            const VT * rowValues = arg->getValues(r);
+
+            for(size_t i = 0; i < rowNumNonZeros; i++) {
+                const auto c = rowColIdxs[i];
+                const VT v = rowValues[i];
+
+                valuesRes[r * res->getRowSkip() + c] = ((std::isnan(v) && std::isnan(replacement)) || v == replacement) ? replacement : v;
+            }
+        }
+    }
+};
+
 #endif //SRC_RUNTIME_LOCAL_KERNELS_REPLACE_H

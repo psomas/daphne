@@ -827,6 +827,8 @@
                 "instantiations": [
                     [["DenseMatrix", "uint64_t"], ["DenseMatrix", "uint64_t"], "uint64_t"],
                     [["DenseMatrix", "size_t"], ["DenseMatrix", "size_t"], "size_t"],
+                    [["CSRMatrix", "double"], ["CSRMatrix", "double"], "double"],
+                    [["DenseMatrix", "double"], ["CSRMatrix", "double"], "double"],
                     ["Frame", "Frame", "float"],
                     ["Frame", "Frame", "double"],
                     ["Frame", "Frame", "int64_t"]
@@ -1276,7 +1278,8 @@
                 "name":  ["CUDA", "CPP"],
                 "instantiations": [
                     [["DenseMatrix", "float"], ["DenseMatrix", "float"], ["DenseMatrix", "float"]],
-                    [["DenseMatrix", "double"], ["DenseMatrix", "double"], ["DenseMatrix", "double"]]
+                    [["DenseMatrix", "double"], ["DenseMatrix", "double"], ["DenseMatrix", "double"]],
+                    [["DenseMatrix", "double"], ["CSRMatrix", "double"], ["DenseMatrix", "double"]]
                 ]
             },
              {
@@ -1665,7 +1668,9 @@
         },
         "instantiations": [
             [["DenseMatrix", "double"], ["DenseMatrix", "double"], "double"],
-            [["DenseMatrix", "int64_t"], ["DenseMatrix", "int64_t"], "int64_t"]
+            [["DenseMatrix", "int64_t"], ["DenseMatrix", "int64_t"], "int64_t"],
+            [["CSRMatrix", "double"], ["CSRMatrix", "double"], "double"],
+            [["DenseMatrix", "double"], ["CSRMatrix", "double"], "double"]
         ]
     },
     {
