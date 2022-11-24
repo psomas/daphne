@@ -1,0 +1,83 @@
+#-------------------------------------------------------------
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+# Modifications Copyright 2022 The DAPHNE Consortium
+#
+#-------------------------------------------------------------
+
+# Simple iterative PageRank implementation
+
+# read the input adjacency matrix
+G = readMatrix($G);
+
+# maximum number of iterations
+maxi = as.si64($maxi);
+
+# error for convergence
+e = as.f64($e);
+
+# damping factor
+df = as.f64($df);
+
+# verbosity toggle
+verbose = $verbose;
+
+# get the number of rows for the input matrix
+# FIXME: check for square matrix
+nrows = nrow(G);
+
+# damping factor complement
+cf = (1.0 - df) / nrows;
+
+# FIXME: we could skip the transpose here, since the matmul kernel has knobs to
+# transpose either argument, but these knobs don't seem to be exposed to the
+# DSL atm afaict
+# FIXME: we could also skip the replace if there's a way to filter the non-zero
+# sums and apply the pow only to these.
+# FIXME: note that the pow is sort of a workaround, since we only support EwMul
+# atm, not Div, but we would have the same issue with the zero elements in that
+# case as well.
+# Normalize the adjacency matrix G and apply the damping factor
+G = df * replace(t(G * pow(sum(G, 0), -1)), nan, 0);
+
+# compute the initial PageRank vector, with a uniform initial probability distribution
+IV = fill(1.0 / nrows, nrows, 1);
+PR = G @ IV + fill(cf, nrows, nrows) @ IV;
+
+iter = 0;
+delta = inf;
+
+while(as.si64(iter < maxi) && as.si64(delta > e)) {
+	# compute the next PageRank vector
+	PV = PR;
+	PR = G @ PR + fill(cf, nrows, nrows) @ PR;
+
+	# L2-norm delta
+	delta = sqrt(sum(pow((PR - PV), 2)));
+
+	if (verbose) {
+		print("pagerank: iter=", 0, 0); print(iter+"e="+delta);
+	}
+
+	iter = iter + 1;
+}
+
+print("pagerank: finished after ", 0, 0);
+print(iter+" iterations, e="+delta);
+print(PR);

@@ -99,4 +99,39 @@ struct Gemv<DenseMatrix<float>, DenseMatrix<float>, DenseMatrix<float>> {
     }
 };
 
+// ----------------------------------------------------------------------------
+// DenseMatrix <- CSRMatrix, DenseMatrix
+// ----------------------------------------------------------------------------
+
+template<typename VT>
+struct Gemv<DenseMatrix<VT>, CSRMatrix<VT>, DenseMatrix<VT>> {
+    static void apply(DenseMatrix<VT> *& res, const CSRMatrix<VT> * mat,const DenseMatrix<VT> * vec, DCTX(ctx)) {
+        const size_t nr1 = mat->getNumRows();
+
+        assert(nr1 == vec->getNumRows() && vec->getNumCols() == 1);
+
+        if(res == nullptr)
+            res = DataObjectFactory::create<DenseMatrix<VT>>(nr1, 1, true);
+
+        const VT * valuesVec = vec->getValues();
+        VT * valuesRes = res->getValues();
+
+        const size_t rowSkipVec= vec->getRowSkip();
+        const size_t rowSkipRes = res->getRowSkip();
+
+        for(size_t r = 0; r < nr1; r++) {
+            const size_t rowNumNonZeros = mat->getNumNonZeros(r);
+            const size_t * rowColIdxs = mat->getColIdxs(r);
+            const VT * rowValues = mat->getValues(r);
+
+            const size_t rowIdxVec = r * rowSkipVec;
+            for(size_t i = 0; i < rowNumNonZeros; i++) {
+                const size_t c = rowColIdxs[i];
+                const size_t rowIdxRes = c * rowSkipRes;
+                valuesRes[rowIdxRes] += rowValues[i] * valuesVec[rowIdxVec];
+            }
+        }
+    }
+};
+
 #endif //SRC_RUNTIME_LOCAL_KERNELS_GEMV_H

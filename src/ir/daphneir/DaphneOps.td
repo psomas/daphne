@@ -775,7 +775,7 @@ def Daphne_SolveOp : Daphne_Op<"solve", [
 }
 
 def Daphne_ReplaceOp : Daphne_Op<"replace", [
-    DataTypeFromFirstArg, ValueTypeFromArgs, ShapeFromArg, CastArgsToResType
+    DataTypeFromFirstArg, ValueTypeFromArgs, ShapeFromArg, CastArgsToResType, SparsityFromArg // FIXME: this might not always be optimal
 ]> {
     let arguments = (ins MatrixOrU:$arg, AnyScalar:$pattern, AnyScalar:$replacement);
     let results = (outs MatrixOrU:$res);
