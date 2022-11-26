@@ -111,7 +111,7 @@ main(int argc, char** argv)
                 clEnumVal(PERCPU, "One queue per CPU core")
             )
     );
-	opt<victimSelectionLogic> victimSelection(
+	opt<VictimSelectionLogic> victimSelection(
             cat(schedulingOptions), desc("Choose work stealing victim selection logic:"),
             values(
                 clEnumVal(SEQ, "Steal from next adjacent worker"),
@@ -132,7 +132,15 @@ main(int argc, char** argv)
             "grain-size", cat(schedulingOptions),
             desc(
                 "Define the minimum grain size of a task (default is 1)"
-            )
+            ),
+            llvm::cl::init(10000)
+    );
+    opt<int> minimumBatchSize(
+            "batch-size", cat(schedulingOptions),
+            desc(
+                "Define the minimum batch size of a task (default is 1000)"
+            ),
+            llvm::cl::init(1000)
     );
     opt<bool> useVectorizedPipelines(
             "vec", cat(schedulingOptions),
@@ -292,6 +300,7 @@ main(int argc, char** argv)
 	user_config.victimSelection = victimSelection;
     user_config.numberOfThreads = numberOfThreads; 
     user_config.minimumTaskSize = minimumTaskSize; 
+    user_config.minimumBatchSize = minimumBatchSize;
     user_config.pinWorkers = pinWorkers;
     user_config.hyperthreadingEnabled = hyperthreadingEnabled;
     user_config.debugMultiThreading = debugMultiThreading;

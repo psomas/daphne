@@ -54,9 +54,10 @@ struct DaphneUserConfig {
     bool explain_obj_ref_mgnt = false;
     SelfSchedulingScheme taskPartitioningScheme = STATIC;
     QueueTypeOption queueSetupScheme = CENTRALIZED;
-	victimSelectionLogic victimSelection = SEQPRI;
-    int numberOfThreads = -1;
+    VictimSelectionLogic victimSelection = SEQ;
+    int numberOfThreads = 0;
     int minimumTaskSize = 1;
+    int minimumBatchSize = 1000;
     
 #ifdef USE_CUDA
     // User config holds once context atm for convenience until we have proper system infrastructure

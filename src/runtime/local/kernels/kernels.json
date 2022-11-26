@@ -579,6 +579,18 @@
     },
     {
         "kernelTemplate": {
+            "header": "CreateVectorizedContext.h",
+            "opName": "createVectorizedContext",
+            "returnType": "void",
+            "templateParams": [],
+            "runtimeParams": []
+        },
+        "instantiations": [
+            []
+        ]
+    },
+    {
+        "kernelTemplate": {
             "header": "CreateFrame.h",
             "opName": "createFrame",
             "returnType": "void",
@@ -2175,15 +2187,10 @@
             "header": "VectorizedPipeline.h",
             "opName": "vectorizedPipeline",
             "returnType": "void",
-            "templateParams": [
-                {
-                    "name": "DTRes",
-                    "isDataType": true
-                }
-            ],
+            "templateParams": [],
             "runtimeParams": [
                 {
-                    "type": "DTRes **",
+                    "type": "Structure **",
                     "name": "outputs"
                 },
                 {
@@ -2224,14 +2231,12 @@
                 },
                 {
                     "type": "void **",
-                    "name": "fun"
+                    "name": "funcs"
                 }
             ]
         },
         "instantiations": [
-            [["DenseMatrix", "double"]],
-            [["DenseMatrix", "float"]],
-            [["CSRMatrix", "double"]]
+            []
         ]
     },
     {

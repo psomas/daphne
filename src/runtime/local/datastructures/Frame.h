@@ -408,6 +408,18 @@ public:
             colIdxs[i] = c;
         return DataObjectFactory::create<Frame>(this, rl, ru, cu-cl, colIdxs);
     }
+
+    size_t bufferSize() const override {
+        throw std::runtime_error("bufferSize() not implemnted for Frame");
+    }
+
+    bool inlineCombine() const override {
+        throw std::runtime_error("vectorization not implemnted for Frame");
+    }
+
+    Frame* createVecOutputFromTile(size_t numRows, size_t numCols, size_t rows, size_t columns) const override {
+        throw std::runtime_error("unimplemented");
+    }
 };
 
 std::ostream & operator<<(std::ostream & os, const Frame & obj);

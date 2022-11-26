@@ -17,20 +17,20 @@
 #pragma once
 
 enum QueueTypeOption {
-    CENTRALIZED=0,
+    CENTRALIZED = 0,
     PERGROUP,
     PERCPU
 };
 
-enum victimSelectionLogic {
-    SEQ=0,
+enum VictimSelectionLogic {
+    SEQ = 0,
     SEQPRI,
     RANDOM,
     RANDOMPRI
 };
 
 enum SelfSchedulingScheme {
-    STATIC=0,
+    STATIC = 0,
     SS,
     GSS,
     TSS,
@@ -42,5 +42,16 @@ enum SelfSchedulingScheme {
     MSTATIC,
     MFSC,
     PSS,
-    INVALID=-1 /* only for JSON enum conversion */
+    INVALID = -1 /* only for JSON enum conversion */
+};
+
+class QueueAttrs {
+public:
+    QueueTypeOption _queueMode;
+    VictimSelectionLogic _stealLogic;
+    int _numQueues;
+
+    explicit QueueAttrs(QueueTypeOption queueMode = CENTRALIZED ,
+            VictimSelectionLogic stealLogic = SEQ, int numQueues = 1) :
+        _queueMode(queueMode), _stealLogic(stealLogic), _numQueues(numQueues) {}
 };

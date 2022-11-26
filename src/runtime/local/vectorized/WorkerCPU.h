@@ -16,186 +16,141 @@
 
 #pragma once
 
-#include "Worker.h"
-#include <runtime/local/vectorized/TaskQueues.h>
+#include <runtime/local/vectorized/CPUTopology.h>
+#include <runtime/local/vectorized/LoadPartitioningDefs.h>
+#include <runtime/local/vectorized/TaskQueue.h>
+#include <runtime/local/vectorized/Worker.h>
 
-class WorkerCPU : public Worker {
-    std::vector<TaskQueue*> _q;
-    std::vector<int> _physical_ids;
-    std::vector<int> _unique_threads;
+#include <array>
+#include <cstdlib>
+#include <memory>
+#include <numeric>
+#include <queue>
+#include <thread>
+#include <vector>
+#include <sched.h>
+#include <semaphore>
+
+class CPUWorker : public Worker {
+protected:
+    int _threadId;
+    int _coreId;
+
+    std::vector<TaskQueue *> _q;
+    // TODO: make this configurable
     std::array<bool, 256> eofWorkers;
-    bool _verbose;
-    uint32_t _fid;
-    uint32_t _batchSize;
-    int _threadID;
-    int _numQueues;
-    int _queueMode;
-    int _stealLogic;
-    bool _pinWorkers;
-public:
-    // this constructor is to be used in practice
-    WorkerCPU(std::vector<TaskQueue*> deques, std::vector<int> physical_ids, std::vector<int> unique_threads,
-            bool verbose, uint32_t fid = 0, uint32_t batchSize = 100, int threadID = 0, int numQueues = 0,
-            int queueMode = 0, int stealLogic = 0, bool pinWorkers = 0) : Worker(), _q(deques),
-            _physical_ids(physical_ids), _unique_threads(unique_threads),
-            _verbose(verbose), _fid(fid), _batchSize(batchSize), _threadID(threadID), _numQueues(numQueues),
-            _queueMode(queueMode), _stealLogic(stealLogic), _pinWorkers(pinWorkers) {
-        // at last, start the thread
-        t = std::make_unique<std::thread>(&WorkerCPU::run, this);
+
+    CPUTopology _topo;
+    QueueAttrs _qattrs;
+
+    std::binary_semaphore _runLock;
+    std::binary_semaphore _workLock;
+    
+    int getNextQueue(int targetQueue, int initialQueue, int currentDomain, VictimSelectionLogic &stealLogic) {
+        auto numQ = _qattrs._numQueues;
+
+        auto should_stop = false; 
+        do {
+            switch (stealLogic) {
+                case SEQ:
+                    /* for SEQ, we stop when we wrap around */
+                    targetQueue = (targetQueue + 1) % numQ;
+                    should_stop = (targetQueue == initialQueue);
+                    break;
+                case SEQPRI:
+                    /* for SEQPRI, we stop when we're out of domain workers / queues */
+                    targetQueue = (targetQueue + 1) % numQ;
+                    should_stop = (_topo._physicalIds[targetQueue] != currentDomain);
+                    break;
+                case RANDOM:
+                    /* for RANDOM and RANDOMPRI, we stop when every worker is done */
+                    targetQueue = rand() % numQ;
+                    should_stop = (std::accumulate(eofWorkers.begin(), eofWorkers.end(), 0) < numQ);
+                    break;
+                case RANDOMPRI: {
+                    /* for RANDOMPRI, that means only the domain workers */
+                    auto n = std::accumulate(_topo._physicalIds.begin(),
+                            _topo._physicalIds.end(), 0,
+                            [=](int cur, int id) { return id == currentDomain ? cur + 1 : cur; });
+                    targetQueue = rand() % numQ;
+                    should_stop = (std::accumulate(eofWorkers.begin(), eofWorkers.end(), 0) < n);
+                    break;
+                }
+                default:
+                    throw std::runtime_error("unknown steal logic mode");
+            }
+        } while (!should_stop);
+
+        /* for the non-PRI variants, we're done when we get out of the loop */
+        if (stealLogic == SEQ || stealLogic == RANDOM) {
+            return -1;
+        }
+
+        /*
+         * for the PRI variants, we fall-back to SEQ/RANDOM for the non
+         * priority queues, so clear bit 1 and continue
+         */
+        stealLogic = stealLogic == SEQ ? SEQPRI : RANDOMPRI;
+
+        return targetQueue;
     }
 
-    ~WorkerCPU() override = default;
+public:
+    explicit CPUWorker(int threadId, int coreId, std::vector<TaskQueue *> q,
+            CPUTopology topo, QueueAttrs qattrs) :
+        Worker(), _threadId(threadId), _coreId(coreId), _q(q), _topo(topo),
+        _qattrs(qattrs), _runLock(0), _workLock(0) {
+        t = std::make_unique<std::thread>(&CPUWorker::run, this);
+    }
+
+    ~CPUWorker() override = default;
 
     void run() override {
-        if (_pinWorkers) {
-            // pin worker to CPU core
-            cpu_set_t cpuset;
-            CPU_ZERO(&cpuset);
-            CPU_SET(_threadID, &cpuset);
-            sched_setaffinity(0, sizeof(cpu_set_t), &cpuset);
+        if (_coreId >= 0) {
+            CPUTopology::pinCPU(_coreId);
         }
 
-        int currentDomain = _physical_ids[_threadID];
-        int targetQueue = _threadID;
-        if( _queueMode == 0 ) {
-            targetQueue = 0;
-        } else if ( _queueMode == 1) {
-            targetQueue = currentDomain;
-        } else if ( _queueMode == 2) {
-            targetQueue = _threadID;
-        } else {
-            std::cout << "Error finding queue." << std::endl;
-        }
-        int startingQueue = targetQueue;
-
-        Task* t = _q[targetQueue]->dequeueTask();
-
-        while( !isEOF(t) ) {
-            //execute self-contained task
-            if( _verbose )
-                std::cerr << "WorkerCPU: executing task." << std::endl;
-            t->execute(_fid, _batchSize);
-            delete t;
-            //get next tasks (blocking)
-            t = _q[targetQueue]->dequeueTask();
+        auto currentDomain = _topo._physicalIds[_threadId];
+        auto targetQueue = _threadId;
+        
+        switch (_qattrs._queueMode) {
+            case CENTRALIZED:
+                targetQueue = 0;
+                break;
+            case PERGROUP:
+                targetQueue = currentDomain;
+                break;
+            case PERCPU:
+                targetQueue = _threadId;
+                break;
+            default:
+                std::cerr << "Invalid queue mode" << std::endl;
         }
 
-        // All tasks from own queue have completed. Now stealing from other queues.
+        while (true) {
+            auto startingQueue = targetQueue;
+            auto stealLogic = _qattrs._stealLogic;
 
-        if( _numQueues > 1 ) {
-            if( _stealLogic == 0) {
-                // Stealing in sequential order
+            _runLock.acquire();
 
-                targetQueue = (targetQueue+1)%_numQueues;
-
-                while ( targetQueue != startingQueue ) {
-                    t = _q[targetQueue]->dequeueTask();
-                    if( isEOF(t) ) {
-                        targetQueue = (targetQueue+1)%_numQueues;
-                    } else {
-                        t->execute(_fid, _batchSize);
-                        delete t;
-                    }
+            do {
+                Task *tsk = _q[targetQueue]->dequeueTask();
+                if (!isEOF(tsk)) {
+                    tsk->execute();
+                    delete tsk;
                 }
-            } else if ( _stealLogic == 1) {
-                // Stealing in sequential order from same domain first
-                if ( _queueMode == 2 ) {
-                    targetQueue = (targetQueue+1)%_numQueues;
+                targetQueue = getNextQueue(targetQueue, startingQueue, currentDomain, stealLogic);
+            } while (targetQueue >= 0);
 
-                    while ( targetQueue != startingQueue ) {
-                        if ( _physical_ids[targetQueue] == currentDomain ){
-                            t = _q[targetQueue]->dequeueTask();
-                            if( isEOF(t) ) {
-                                targetQueue = (targetQueue+1)%_numQueues;
-                            } else {
-                                t->execute(_fid, _batchSize);
-                                delete t;
-                            }
-                        } else {
-                            targetQueue = (targetQueue+1)%_numQueues;
-                        }
-                    }
-                }
-
-                // No more tasks on this domain, now switching to other domain
-
-                targetQueue = (targetQueue+1)%_numQueues;
-
-                while ( targetQueue != startingQueue ) {
-                    t = _q[targetQueue]->dequeueTask();
-                    if( isEOF(t) ) {
-                        targetQueue = (targetQueue+1)%_numQueues;
-                    } else {
-                        t->execute(_fid, _batchSize);
-                        delete t;
-                    }
-                }
-            } else if( _stealLogic == 2) {
-                // stealing from random workers until all workers EOF
-
-                eofWorkers.fill(false);
-                while( std::accumulate(eofWorkers.begin(), eofWorkers.end(), 0) < _numQueues ) {
-                    targetQueue = rand() % _numQueues;
-                    if( eofWorkers[targetQueue] == false ) {
-                        t = _q[targetQueue]->dequeueTask();
-                        //std::cout << "Execute task stolen from: " << targetQueue << std::endl;
-                        if( isEOF(t) ) {
-                            eofWorkers[targetQueue] = true;
-                        } else {
-                            t->execute(_fid, _batchSize);
-                            delete t;
-                        }
-                    }
-                }
-
-            } else if ( _stealLogic == 3) {
-                // stealing from random workers from same socket first
-                int queuesThisDomain = 0;
-                eofWorkers.fill(false);
-
-                for( int i=0; i<_numQueues; i++ ) {
-                    if( _physical_ids[i] == currentDomain ) {
-                        queuesThisDomain++;
-                    }
-                }
-                if ( _queueMode == 2 ) {
-                    while( std::accumulate(eofWorkers.begin(), eofWorkers.end(), 0) < queuesThisDomain ) {
-                        targetQueue = rand() % _numQueues;
-                        if( _physical_ids[targetQueue] == currentDomain) {
-                            if( eofWorkers[targetQueue] == false ) {
-                                t = _q[targetQueue]->dequeueTask();
-                                if( isEOF(t) ) {
-                                    eofWorkers[targetQueue] = true;
-                                } else {
-                                    t->execute(_fid, _batchSize);
-                                    delete t;
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // all workers on same domain are EOF, now also allowing stealing from other domain
-                // This could also be done by keeping a list of EOF workers on the other domain
-
-                while ( std::accumulate(eofWorkers.begin(), eofWorkers.end(), 0) < _numQueues ) {
-                    targetQueue = rand() % _numQueues;
-                    // no need to check if they are on the other domain, because otherwise they would be EOF anyway
-                    if( eofWorkers[targetQueue] == false ) {
-                        t = _q[targetQueue]->dequeueTask();
-                        if( isEOF(t) ) {
-                            eofWorkers[targetQueue] = true;
-                        } else {
-                            t->execute(_fid, _batchSize);
-                            delete t;
-                        }
-                    }
-                }
-            }
+            _workLock.release();
         }
+    }
 
-        // No more tasks available anywhere
-        if( _verbose )
-            std::cerr << "WorkerCPU: received EOF, finalized." << std::endl;
+    void wait() override {
+        _workLock.acquire();
+    }
+
+    void unblock() override {
+        _runLock.release();
     }
 };

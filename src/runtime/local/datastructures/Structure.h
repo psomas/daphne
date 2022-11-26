@@ -96,6 +96,11 @@ public:
     }
 
     /**
+     * @brief Returns the current allocated size for the structure.
+     */
+    virtual size_t bufferSize() const = 0;
+
+    /**
      * @brief Prints a human-readable representation of this data object to the
      * given stream.
      * 
@@ -141,4 +146,21 @@ public:
      * @return 
      */
     virtual Structure* slice(size_t rl, size_t ru, size_t cl, size_t cu) const = 0;
+
+    /**
+     * @brief Returns true if the underlying structure supports in-place
+     * combining for vecrorized execution.
+     */
+    virtual bool inlineCombine() const = 0;
+
+    /**
+     * @brief Creates a new structure with the specified dimensions and copies
+     * the current structure's contents to the specified location / tile.
+     * @param numRows Number of rows of the new structure.
+     * @param numCols Number of columns of the new structure.
+     * @param row Start copying the current structure at this row.
+     * @param col Start copying the current structure at this column.
+     * @return Pointer to the newly created structure.
+     */
+    virtual Structure* createVecOutputFromTile(size_t numRows, size_t numCols, size_t rows, size_t columns) const = 0;
 };

@@ -264,10 +264,25 @@ public:
         return DataObjectFactory::create<DenseMatrix<ValueType>>(this, rl, ru, cl, cu);
     }
 
-    // convenience functions
-    size_t bufferSize();
+    size_t bufferSize() const override {
+        return sizeof(values.get());
+    }
 
-    [[nodiscard]] size_t bufferSize() const { return const_cast<DenseMatrix*>(this)->bufferSize(); }
+    bool inlineCombine() const override {
+        return true;
+    }
+
+    DenseMatrix<ValueType>* createVecOutputFromTile(size_t numRows, size_t numCols, size_t row, size_t col) const override {
+        auto res = DataObjectFactory::create<DenseMatrix<ValueType>>(numRows, numCols, false);
+        auto dest = res->getValues() + row * res->getRowSkip() + col;
+        auto src = values.get();
+        for (size_t r = 0; r < this->numRows; r++) {
+            memcpy(dest, src, this->numCols * sizeof(ValueType));
+            dest += res->getRowSkip();
+            src += rowSkip;
+        }
+        return res;
+    }
 };
 
 template <typename ValueType>
@@ -540,9 +555,18 @@ public:
         return DataObjectFactory::create<DenseMatrix<const char*>>(this, rl, ru, cl, cu);
     }
 
-    size_t bufferSize();
+    size_t bufferSize() const override {
+        /* FIXME: sum the strlen */
+        return sizeof(values.get());
+    }
 
-    size_t bufferSize() const { return const_cast<DenseMatrix*>(this)->bufferSize(); }
+    bool inlineCombine() const override {
+        return true;
+    }
+
+    DenseMatrix<const char*>* createVecOutputFromTile(size_t numRows, size_t numCols, size_t row, size_t col) const override {
+        throw std::runtime_error("unimplemented");
+    }
 
     float printBufferSize() const { return static_cast<float>(bufferSize()) / (1048576); }
 

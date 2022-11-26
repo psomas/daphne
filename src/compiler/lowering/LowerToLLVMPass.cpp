@@ -195,15 +195,6 @@ class CallKernelOpLowering : public OpConversionPattern<daphne::CallKernelOp>
             // mapped to the superclass Structure (see #397).
             // Check if all results have the same type.
             Type t0 = resultTypes[0];
-            Type mt0 = t0.dyn_cast<daphne::MatrixType>().withSameElementTypeAndRepr();
-            for(size_t i = 1; i < numRes; i++)
-                if(mt0 != resultTypes[i].dyn_cast<daphne::MatrixType>().withSameElementTypeAndRepr())
-                    throw std::runtime_error(
-                            "all results of a CallKernelOp must have the same "
-                            "type to combine them into a single variadic result"
-                    );
-            // Wrap the common result type into a pointer, since we need an
-            // array of that type.
             args.push_back(LLVM::LLVMPointerType::get(
                     typeConverter->isLegal(t0)
                     ? t0
@@ -690,19 +681,7 @@ public:
         const size_t numRes = op->getNumResults();
         
         if(numRes > 0) {
-            // TODO Support individual types for all outputs (see #397).
-            // Check if all results have the same type.
-            Type mt0 = resultTypes[0].dyn_cast<daphne::MatrixType>().withSameElementTypeAndRepr();
-            for(size_t i = 1; i < numRes; i++)
-                if(mt0 != resultTypes[i].dyn_cast<daphne::MatrixType>().withSameElementTypeAndRepr())
-                    throw std::runtime_error(
-                            "encountered a vectorized pipelines with different "
-                            "result types, but at the moment we require all "
-                            "results to have the same type"
-                    );
-            
-            // Append the name of the common type of all results to the kernel name.
-            callee << "__" << CompilerUtils::mlirTypeToCppTypeName(resultTypes[0]) << "_variadic__size_t";
+            callee << "__" << CompilerUtils::mlirTypeToCppTypeName(resultTypes[0], true) << "_variadic__size_t";
         }
 
         mlir::Type operandType;

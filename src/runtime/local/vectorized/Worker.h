@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include <runtime/local/vectorized/Tasks.h>
+#include <runtime/local/vectorized/Task.h>
 
 #include <thread>
 #include <sched.h>
@@ -34,18 +34,18 @@ public:
     Worker& operator=(const Worker&) = delete;
 
     // move constructor
-    Worker(Worker&& obj)  noexcept : t(std::move(obj.t)) {}
+    Worker(Worker&& obj) noexcept : t(std::move(obj.t)) {}
 
     // move assignment operator
-    Worker& operator=(Worker&& obj)  noexcept {
-        if(t->joinable())
+    Worker& operator=(Worker&& obj) noexcept {
+        if (t->joinable())
             t->join();
         t = std::move(obj.t);
         return *this;
     }
 
     virtual ~Worker() {
-        if(t->joinable())
+        if (t->joinable())
             t->join();
     };
 
@@ -53,7 +53,9 @@ public:
         t->join();
     }
     virtual void run() = 0;
-    static bool isEOF(Task* t) {
-        return dynamic_cast<EOFTask*>(t);
+    virtual void unblock() = 0;
+    virtual void wait() = 0;
+    static bool isEOF(Task *t) {
+        return dynamic_cast<EOFTask *>(t);
     }
 };

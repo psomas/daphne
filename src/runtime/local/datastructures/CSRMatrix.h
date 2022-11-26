@@ -386,8 +386,16 @@ public:
         throw std::runtime_error("CSRMatrix does not support slice yet");
     }
 
-    size_t bufferSize() {
-        return this->getNumItems() * sizeof(ValueType);
+    size_t bufferSize() const override {
+        return sizeof(values.get()) + sizeof(colIdxs.get()) + sizeof(rowOffsets.get());
+    }
+
+    bool inlineCombine() const override {
+        return false;
+    }
+
+    CSRMatrix* createVecOutputFromTile(size_t numRows, size_t numCols, size_t rows, size_t columns) const override {
+        throw std::runtime_error("unimplemented");
     }
 };
 

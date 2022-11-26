@@ -60,7 +60,7 @@ void InsertDaphneContextPass::runOnFunction()
         builder.create<daphne::CreateCUDAContextOp>(loc);
     }
 #endif
-    if (user_config.use_distributed){
+    if (user_config.use_distributed) {
         builder.create<daphne::CreateDistributedContextOp>(loc);
     }
 #ifdef USE_FPGAOPENCL
@@ -68,8 +68,11 @@ void InsertDaphneContextPass::runOnFunction()
         builder.create<daphne::CreateFPGAContextOp>(loc);
     }
 #endif
+    // FIXME: Will this work, if it gets called per function / block etc?
+    if (user_config.use_vectorized_exec) {
+        builder.create<daphne::CreateVectorizedContextOp>(loc);
+    }
 
- 
     // Insert a DestroyDaphneContextOp as the last operation in the block, but
     // before the block's terminator.
     builder.setInsertionPoint(b.getTerminator());

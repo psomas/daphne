@@ -14,30 +14,31 @@
  * limitations under the License.
  */
 
-#ifndef SRC_RUNTIME_LOCAL_VECTORIZED_TASKQUEUES_H
-#define SRC_RUNTIME_LOCAL_VECTORIZED_TASKQUEUES_H
+#pragma once
 
 #include <list>
 #include <mutex>
 #include <condition_variable>
-#include <runtime/local/vectorized/Tasks.h>
+#include <runtime/local/vectorized/Task.h>
+#include <runtime/local/vectorized/CPUTopology.h>
 
+// TODO: make this configurable
 const uint64_t DEFAULT_MAX_SIZE = 100000;
 
 class TaskQueue {
 public:
     virtual ~TaskQueue() = default;
 
-    virtual void enqueueTask(Task* t) = 0;
-    virtual void enqueueTaskPinned(Task* t, int targetCPU) = 0;
-    virtual Task* dequeueTask() = 0;
+    virtual void enqueueTask(Task *t) = 0;
+    virtual void enqueueTaskPinned(Task *t, int targetCPU) = 0;
+    virtual Task *dequeueTask() = 0;
     virtual uint64_t size() = 0;
     virtual void closeInput() = 0;
 };
 
 class BlockingTaskQueue : public TaskQueue {
 private:
-    std::list<Task*> _data;
+    std::list<Task *> _data;
     std::mutex _qmutex;
     std::condition_variable _cv;
     EOFTask _eof; //end marker
@@ -52,11 +53,11 @@ public:
     }
     ~BlockingTaskQueue() override = default;
 
-    void enqueueTask(Task* t) override {
+    void enqueueTask(Task *t) override {
         // lock mutex, released at end of scope
         std::unique_lock<std::mutex> ul(_qmutex);
         // blocking wait until tasks dequeued
-        while( _data.size() + 1 > _capacity )
+        while (_data.size() + 1 > _capacity)
             _cv.wait(ul);
         // add task to end of list
         _data.push_back(t);
@@ -64,31 +65,24 @@ public:
         _cv.notify_one();
     }
 
-    void enqueueTaskPinned(Task* t, int targetCPU) override {
+    void enqueueTaskPinned(Task *t, int targetCPU) override {
         // Change CPU pinning before enqueue to utilize NUMA first-touch policy
-        cpu_set_t cpuset;
-        CPU_ZERO(&cpuset);
-        CPU_SET(targetCPU, &cpuset);
-        sched_setaffinity(0, sizeof(cpu_set_t), &cpuset);
-        std::unique_lock<std::mutex> ul(_qmutex);
-        while( _data.size() + 1 > _capacity )
-            _cv.wait(ul);
-        _data.push_back(t);
-        _cv.notify_one();
+        CPUTopology::pinCPU(targetCPU);
+        enqueueTask(t);
     }
 
-    Task* dequeueTask() override {
+    Task *dequeueTask() override {
         // lock mutex, released at end of scope
         std::unique_lock<std::mutex> ul(_qmutex);
         // blocking wait for new tasks
-        while( _data.empty() ) {
-            if( _closedInput )
+        while (_data.empty()) {
+            if (_closedInput)
                 return &_eof;
             else
                 _cv.wait(ul);
         }
         // obtain next task
-        Task* t = _data.front();
+        Task *t = _data.front();
         _data.pop_front();
         _cv.notify_one();
         return t;
@@ -105,5 +99,3 @@ public:
         _cv.notify_all();
     }
 };
-
-#endif //SRC_RUNTIME_LOCAL_VECTORIZED_TASKQUEUES_H

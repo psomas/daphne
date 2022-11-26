@@ -190,10 +190,6 @@ void DenseMatrix<ValueType>::alloc_shared_values(std::shared_ptr<ValueType[]> sr
         values = std::shared_ptr<ValueType[]>(new ValueType[numRows*numCols]);
 }
 
-template<typename ValueType>
-size_t DenseMatrix<ValueType>::bufferSize() {
-    return this->getNumItems() * sizeof(ValueType);
-}
 
 
 
@@ -271,10 +267,6 @@ void DenseMatrix<const char*>::alloc_shared_strings(std::shared_ptr<CharBuf> src
         strBuf = std::make_shared<CharBuf>(strBufferCapacity_, getNumItems());
         appendZerosRange(&values[0], getNumItems());
     }
-}
-
-size_t DenseMatrix<const char*>::bufferSize() {
-    return this->getNumItems() * sizeof(const char*);
 }
 
 // explicitly instantiate to satisfy linker

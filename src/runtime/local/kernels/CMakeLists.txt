@@ -47,7 +47,6 @@ if(USE_CUDA AND CMAKE_CUDA_COMPILER)
             ${PREFIX}/Syrk.cu
             ${PREFIX}/Transpose.cpp
             ${PROJECT_BINARY_DIR}/src/runtime/local/kernels/CUDAkernels.cpp
-            ${PROJECT_SOURCE_DIR}/src/runtime/local/vectorized/TasksCUDA.cpp
             ${PROJECT_SOURCE_DIR}/src/runtime/local/kernels/VectorizedPipeline.h
             ${PROJECT_SOURCE_DIR}/src/runtime/local/vectorized/WorkerGPU.h
         )
@@ -64,6 +63,7 @@ if(USE_CUDA AND CMAKE_CUDA_COMPILER)
     set_target_properties(CUDAKernels PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 endif()
 
+set(CMAKE_CXX_STANDARD 20)
 add_custom_command(
         OUTPUT ${PROJECT_BINARY_DIR}/src/runtime/local/kernels/kernels.cpp
         COMMAND python3 ARGS genKernelInst.py kernels.json ${PROJECT_BINARY_DIR}/src/runtime/local/kernels/kernels.cpp CPP
@@ -78,9 +78,6 @@ list(APPEND LIBS DataStructures IO ProtoDataConverter BLAS::BLAS)
 add_library(AllKernels SHARED
         ${PROJECT_BINARY_DIR}/src/runtime/local/kernels/kernels.cpp
         ${PROJECT_SOURCE_DIR}/src/runtime/local/kernels/Pooling.cpp
-        ${PROJECT_SOURCE_DIR}/src/runtime/local/vectorized/Tasks.cpp
-        ${PROJECT_SOURCE_DIR}/src/runtime/local/vectorized/MTWrapper_dense.cpp
-        ${PROJECT_SOURCE_DIR}/src/runtime/local/vectorized/MTWrapper_sparse.cpp
         ${PROJECT_SOURCE_DIR}/src/runtime/local/kernels/VectorizedPipeline.h
         ${PROJECT_SOURCE_DIR}/src/runtime/local/vectorized/WorkerCPU.h
 )

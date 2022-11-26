@@ -1292,6 +1292,10 @@ def Daphne_CreateFPGAContextOp : Daphne_Op<"createFPGAContext", [FPGAOPENCLSuppo
     let results = (outs);
 }
 
+def Daphne_CreateVectorizedContextOp : Daphne_Op<"createVectorizedContext", []> {
+    let arguments = (ins);
+    let results = (outs);
+}
 
 // ****************************************************************************
 // Vectorized operations

@@ -25,15 +25,14 @@
 #include "IContext.h"
 
 #ifdef USE_FPGAOPENCL
-    #include "FPGAContext.h"
+#include "FPGAContext.h"
 #endif
 
-
-
-
-// This macro is intended to be used in kernel function signatures, such that
-// we can change the ubiquitous DaphneContext parameter in a single place, if
-// required.
+/*
+ * This macro is intended to be used in kernel function signatures, such that
+ * we can change the ubiquitous DaphneContext parameter in a single place, i
+ * required.
+ */
 #define DCTX(varname) DaphneContext * varname
 
 /**
@@ -43,21 +42,21 @@
  * the kernel to retrieve information about the run-time environment.
  */
 struct DaphneContext {
-    // Feel free to extend this class with any kind of run-time information
-    // that might be relevant to some kernel. Each kernel can extract the
-    // information it requires and does not need to worry about information it
-    // does not require.
-    // If you need to add a bunch of related information items, please consider
-    // creating an individual struct/class for them and adding a single member
-    // of that type here, in order to separate concerns and allow a  high-level
-    // overview of the context information.
-
+    /*
+     * Feel free to extend this class with any kind of run-time information
+     * that might be relevant to some kernel. Each kernel can extract the
+     * information it requires and does not need to worry about information it
+     * does not require.  If you need to add a bunch of related information
+     * items, please consider creating an individual struct/class for them and
+     * adding a single member of that type here, in order to separate concerns
+     * and allow a  high-level overview of the context information.
+     */
 
     std::vector<std::unique_ptr<IContext>> cuda_contexts;
     std::vector<std::unique_ptr<IContext>> fpga_contexts;
 
-
     std::unique_ptr<IContext> distributed_context;
+    std::unique_ptr<IContext> vectorized_context;
 
     /**
      * @brief The user configuration (including information passed via CLI
@@ -82,7 +81,9 @@ struct DaphneContext {
         cuda_contexts.clear();
         fpga_contexts.clear();
 
-
+        if (vectorized_context != nullptr) {
+            vectorized_context->destroy();
+        }
     }
 
 #ifdef USE_CUDA
@@ -91,6 +92,7 @@ struct DaphneContext {
         return cuda_contexts[dev_id].get();
     }
 #endif
+
 #ifdef USE_FPGAOPENCL
     // ToDo: in a multi device setting this should use a find call instead of a direct [] access
     [[nodiscard]] FPGAContext* getFPGAContext(int dev_id) const {
@@ -98,15 +100,17 @@ struct DaphneContext {
        return dynamic_cast<FPGAContext*>(fpga_contexts[dev_id].get());
     }
 #endif
- 
-
-
 
     [[nodiscard]] bool useCUDA() const { return !cuda_contexts.empty(); }
     [[nodiscard]] bool useFPGA() const { return !fpga_contexts.empty(); }
 
     [[nodiscard]] IContext *getDistributedContext() const {
         return distributed_context.get();
+    }
+
+    [[nodiscard]] bool useVectorizedContext() const { return vectorized_context != nullptr; }
+    [[nodiscard]] IContext *getVectorizedContext() const {
+        return vectorized_context.get();
     }
     
     [[maybe_unused]] [[nodiscard]] DaphneUserConfig getUserConfig() const { return config; }
